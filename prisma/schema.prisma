@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  username         String?  @unique
+  phone            String?  @unique
+  email            String?  @unique
+  passwordHash     String?  // bcrypt hash
+  pinHash          String?  // 4-digit PIN hashed via bcrypt
+  totpSecret       String?  // base32 secret for TOTP
+  totpEnabled      Boolean  @default(false)
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt  DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  otps             OTP[]
+}
+
+model OTP {
+  id          String   @id @default(cuid())
+  type        OTPType
+  identifier  String   // phone or email
+  codeHash    String   // sha256(code + salt)
+  salt        String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+  userId      String?
+
+  @@index([identifier, type])
+  @@index([expiresAt])
+}
+
+enum OTPType {
+  PHONE
+  EMAIL
+}
