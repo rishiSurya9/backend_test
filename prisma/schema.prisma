@@ -22,6 +22,8 @@ model User {
   updatedAt        DateTime @updatedAt
 
   otps             OTP[]
+  wallet           Wallet?
+  transactions     Transaction[]
 }
 
 model OTP {
@@ -44,4 +46,63 @@ model OTP {
 enum OTPType {
   PHONE
   EMAIL
+}
+
+// Wallet holds user balances across different buckets
+model Wallet {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id])
+  userId          String   @unique
+  mainBalance     Decimal  @default(0.00) @db.Decimal(18, 2)
+  referralBalance Decimal  @default(0.00) @db.Decimal(18, 2)
+  tokenBalance    Decimal  @default(0.00) @db.Decimal(18, 2)
+  currency        String   @default("INR")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Ledger of wallet-affecting events
+model Transaction {
+  id           String           @id @default(cuid())
+  user         User             @relation(fields: [userId], references: [id])
+  userId       String
+  type         TransactionType
+  status       TransactionStatus @default(PENDING)
+  provider     PaymentProvider?
+  amount       Decimal           @db.Decimal(18, 2)
+  currency     String            @default("INR")
+  walletFrom   WalletBucket?
+  walletTo     WalletBucket?
+  referenceId  String?           // e.g., Razorpay order/payment id, Stripe pi id, payout id
+  description  String?
+  meta         Json?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([referenceId])
+}
+
+enum WalletBucket {
+  MAIN
+  REFERRAL
+  TOKEN
+}
+
+enum TransactionType {
+  ADD_FUNDS
+  WITHDRAW
+  TRANSFER_INTERNAL
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+  SYSTEM
 }

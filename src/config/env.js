@@ -21,4 +21,16 @@ export const env = {
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASS: process.env.SMTP_PASS,
   SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'no-reply@example.com'
+  ,
+  // Payments
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+  MIN_WITHDRAW_AMOUNT: Number(process.env.MIN_WITHDRAW_AMOUNT || 100),
+  WITHDRAW_ADMIN_THRESHOLD: Number(process.env.WITHDRAW_ADMIN_THRESHOLD || 5000)
+  ,
+  // Admin guards
+  ADMIN_USER_IDS: process.env.ADMIN_USER_IDS,
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS
 };
