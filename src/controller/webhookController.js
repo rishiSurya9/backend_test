@@ -1,10 +1,15 @@
 import crypto from 'crypto';
 import { prisma } from '../prisma/client.js';
+import { finalizeSuccessfulTokenPurchase } from './paymentController.js';
 import { env } from '../config/env.js';
 
 async function creditWalletForTransaction(tx, trx) {
-  if (trx.status === 'SUCCESS' && trx.type === 'ADD_FUNDS' && trx.walletTo === 'MAIN') {
+  if (trx.status !== 'SUCCESS') return;
+  if (trx.type === 'ADD_FUNDS' && trx.walletTo === 'MAIN') {
     await tx.wallet.update({ where: { userId: trx.userId }, data: { mainBalance: { increment: Number(trx.amount) } } });
+  } else if (trx.type === 'TOKEN_PURCHASE' && trx.walletTo === 'TOKEN') {
+    // Defer to token purchase finalizer (handles credit + invoice)
+    await finalizeSuccessfulTokenPurchase(tx, trx);
   }
 }
 
@@ -95,4 +100,3 @@ export async function stripeWebhook(req, res) {
     return res.status(200).json({ ok: true });
   }
 }
-

@@ -214,8 +214,20 @@ _________________________________________________
   - Body: `{ "amount": 1200, "method": "UPI"|"BANK", "details": { ... } }`
   - Enforces min (₹100 default) and admin approval if amount > `WITHDRAW_ADMIN_THRESHOLD`.
 
-- GET `http://localhost:5000/payments/transactions` — List payment transactions (add-funds + withdrawals)
+- GET `http://localhost:5000/payments/transactions` - List payment transactions (add-funds + withdrawals)
   - Query: `?limit=20&cursor=<id>&type=ADD_FUNDS|WITHDRAW&status=PENDING|SUCCESS|FAILED`
+
+- GET `http://localhost:5000/payments/plans` - List active token sale plans with computed INR price and token quantity.
+
+- POST `http://localhost:5000/payments/token/purchase` - Buy tokens using main wallet balance (alias: `/payments/token/order`).
+  - Body: `{ "planId": "<plan-id>" }` or `{ "planName": "Starter" }`
+  - Debits main balance, credits token balance, creates `Transaction`, `TokenPurchase`, and PDF invoice. Response includes `{ tokenPurchaseId, transactionId, tokens, amountInr, invoiceId, wallet }`.
+
+- GET `http://localhost:5000/payments/token/purchases` - Paginated token purchase history for the authenticated user.
+  - Query: `?limit=20&cursor=<id>`
+  - Returns plan info, tokens, prices, transaction summary, and invoice metadata.
+
+- GET `http://localhost:5000/payments/token/purchases/:id/invoice` - Download the PDF invoice for a specific purchase (auth + ownership required).
 
 - Admin endpoints
   - POST `http://localhost:5000/payments/withdrawals/:id/approve` — mark pending withdrawal SUCCESS (requires admin)
@@ -230,4 +242,5 @@ Environment keys in `.env`:
 - `STRIPE_WEBHOOK_SECRET` (only for webhook verification; payments use Razorpay)
 - `MIN_WITHDRAW_AMOUNT` (default 100)
 - `WITHDRAW_ADMIN_THRESHOLD` (default 5000)
+- `USD_INR_RATE`, `TOKEN_PRICE_USD`, `PLAN_STARTER_USD`, `PLAN_GROWTH_USD`, `PLAN_PRO_USD`, `PLAN_ELITE_USD`
 Powered By: [postman-to-markdown](https://github.com/bautistaj/postman-to-markdown/)

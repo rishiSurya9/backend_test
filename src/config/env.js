@@ -30,6 +30,14 @@ export const env = {
   MIN_WITHDRAW_AMOUNT: Number(process.env.MIN_WITHDRAW_AMOUNT || 100),
   WITHDRAW_ADMIN_THRESHOLD: Number(process.env.WITHDRAW_ADMIN_THRESHOLD || 5000)
   ,
+  // Token plans and FX
+  USD_INR_RATE: Number(process.env.USD_INR_RATE || 83),
+  TOKEN_PRICE_USD: Number(process.env.TOKEN_PRICE_USD || 1),
+  PLAN_STARTER_USD: Number(process.env.PLAN_STARTER_USD || 10),
+  PLAN_GROWTH_USD: Number(process.env.PLAN_GROWTH_USD || 25),
+  PLAN_PRO_USD: Number(process.env.PLAN_PRO_USD || 50),
+  PLAN_ELITE_USD: Number(process.env.PLAN_ELITE_USD || 100)
+  ,
   // Admin guards
   ADMIN_USER_IDS: process.env.ADMIN_USER_IDS,
   ADMIN_EMAILS: process.env.ADMIN_EMAILS

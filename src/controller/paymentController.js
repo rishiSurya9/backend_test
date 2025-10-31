@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { prisma } from '../prisma/client.js';
 import { env } from '../config/env.js';
+import { createInvoiceForTokenPurchase } from '../services/invoiceService.js';
+import { describePlanPricing } from '../services/planService.js';
 
 function assert(condition, message = 'Bad Request', code = 400) {
   if (!condition) {
@@ -63,6 +65,95 @@ export async function createAddFundsOrder(req, res, next) {
       }
     });
     return res.status(202).json({ ok: true, provider: 'RAZORPAY', order: { id: orderId, amount: Math.round(amt * 100), currency } });
+  } catch (err) { next(err); }
+}
+
+// Create token purchase order for a given plan
+export async function createTokenPurchaseOrder(req, res, next) {
+  try {
+    const { planId, planName } = req.body || {};
+    const userId = req.user.id;
+
+    let plan = null;
+    if (planId) plan = await prisma.plan.findUnique({ where: { id: String(planId) } });
+    if (!plan && planName) plan = await prisma.plan.findUnique({ where: { name: String(planName) } });
+    if (!plan || !plan.active) {
+      const err = new Error('Plan not found'); err.status = 404; throw err;
+    }
+
+    const { priceUsd, amountInr, tokens } = describePlanPricing(plan);
+    assert(amountInr > 0, 'Plan amount not configured');
+    assert(tokens > 0, 'Plan token amount not configured');
+
+    const result = await prisma.$transaction(async (tx) => {
+      const wallet = await tx.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
+      assert(Number(wallet.mainBalance) >= amountInr, 'Insufficient main balance', 400);
+
+      const updatedWallet = await tx.wallet.update({
+        where: { userId },
+        data: {
+          mainBalance: { decrement: amountInr },
+          tokenBalance: { increment: tokens }
+        }
+      });
+
+      const trx = await tx.transaction.create({
+        data: {
+          userId,
+          type: 'TOKEN_PURCHASE',
+          status: 'SUCCESS',
+          amount: amountInr,
+          currency: 'INR',
+          walletFrom: 'MAIN',
+          walletTo: 'TOKEN',
+          provider: 'SYSTEM',
+          description: `Token purchase: ${plan.name}`,
+          meta: {
+            planId: plan.id,
+            planName: plan.name,
+            priceUsd,
+            amountInr,
+            tokens,
+            rate: Number(env.USD_INR_RATE || 1)
+          }
+        }
+      });
+
+      const purchase = await tx.tokenPurchase.create({
+        data: {
+          userId,
+          planId: plan.id,
+          transactionId: trx.id,
+          status: 'SUCCESS',
+          priceUsd,
+          priceInr: amountInr,
+          tokens
+        }
+      });
+
+      const invoice = await createInvoiceForTokenPurchase({
+        userId,
+        tokenPurchase: purchase,
+        planName: plan.name,
+        amountInr,
+        tokens
+      }, tx);
+
+      return { wallet: updatedWallet, trx, purchase, invoice };
+    });
+
+    return res.json({
+      ok: true,
+      tokenPurchaseId: result.purchase.id,
+      transactionId: result.trx.id,
+      tokens,
+      amountInr,
+      invoiceId: result.invoice?.id || null,
+      wallet: {
+        mainBalance: Number(result.wallet.mainBalance),
+        tokenBalance: Number(result.wallet.tokenBalance)
+      }
+    });
   } catch (err) { next(err); }
 }
 
@@ -189,5 +280,93 @@ export async function rejectWithdrawal(req, res, next) {
       return trx;
     });
     res.json({ ok: true, transaction: result });
+  } catch (err) { next(err); }
+}
+
+// Helper used by webhook to finalize token purchases and produce invoice
+export async function finalizeSuccessfulTokenPurchase(tx, trx) {
+  if (trx.type !== 'TOKEN_PURCHASE' || trx.status !== 'SUCCESS') return;
+  const purchase = await tx.tokenPurchase.findFirst({ where: { transactionId: trx.id } });
+  if (!purchase) return;
+  if (purchase.status === 'SUCCESS') return; // idempotent
+
+  // Credit token wallet (create wallet if missing)
+  await tx.wallet.upsert({
+    where: { userId: trx.userId },
+    update: { tokenBalance: { increment: Number(purchase.tokens) } },
+    create: { userId: trx.userId, tokenBalance: Number(purchase.tokens) }
+  });
+
+  const updated = await tx.tokenPurchase.update({ where: { id: purchase.id }, data: { status: 'SUCCESS' } });
+
+  // Generate invoice
+  await createInvoiceForTokenPurchase({
+    userId: trx.userId,
+    tokenPurchase: updated,
+    planName: trx.meta?.planName || 'Plan',
+    amountInr: Number(updated.priceInr),
+    tokens: Number(updated.tokens)
+  }, tx);
+}
+
+export async function listTokenPurchases(req, res, next) {
+  try {
+    const { limit = 20, cursor } = req.query || {};
+    const take = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const userId = req.user.id;
+
+    const purchases = await prisma.tokenPurchase.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take,
+      skip: cursor ? 1 : 0,
+      cursor: cursor ? { id: String(cursor) } : undefined,
+      include: {
+        plan: true,
+        invoice: { select: { id: true, createdAt: true } },
+        transaction: { select: { id: true, amount: true, currency: true, status: true, createdAt: true } }
+      }
+    });
+
+    const nextCursor = purchases.length === take ? purchases[purchases.length - 1].id : null;
+    const items = purchases.map((p) => ({
+      id: p.id,
+      status: p.status,
+      priceUsd: Number(p.priceUsd),
+      priceInr: Number(p.priceInr),
+      tokens: Number(p.tokens),
+      createdAt: p.createdAt,
+      plan: { id: p.planId, name: p.plan?.name || null },
+      invoice: p.invoice ? { id: p.invoice.id, createdAt: p.invoice.createdAt } : null,
+      transaction: p.transaction ? {
+        id: p.transaction.id,
+        amount: Number(p.transaction.amount),
+        currency: p.transaction.currency,
+        status: p.transaction.status,
+        createdAt: p.transaction.createdAt
+      } : null
+    }));
+
+    res.json({ ok: true, items, nextCursor });
+  } catch (err) { next(err); }
+}
+
+export async function downloadTokenPurchaseInvoice(req, res, next) {
+  try {
+    const { id } = req.params;
+    const purchase = await prisma.tokenPurchase.findUnique({
+      where: { id: String(id) },
+      include: { invoice: true }
+    });
+    if (!purchase || purchase.userId !== req.user.id) {
+      const err = new Error('Token purchase not found');
+      err.status = 404;
+      throw err;
+    }
+    assert(purchase.invoice, 'Invoice not available', 404);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice_${purchase.id}.pdf"`);
+    res.send(Buffer.from(purchase.invoice.pdf));
   } catch (err) { next(err); }
 }

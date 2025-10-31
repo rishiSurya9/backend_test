@@ -12,6 +12,7 @@ import authRouter from './routes/authRoute.js';
 import walletRouter from './routes/walletRoute.js';
 import paymentRouter from './routes/paymentRoute.js';
 import webhookRouter from './routes/webhookRoute.js';
+import { ensurePlansSeeded } from './services/planService.js';
 
 const app = express();
 
@@ -32,6 +33,11 @@ app.use(
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', name: env.APP_NAME, env: env.NODE_ENV });
+});
+
+// Seed plans from env at startup (idempotent)
+ensurePlansSeeded().catch((e) => {
+  console.error('Plan seeding failed:', e?.message || e);
 });
 
 // Optional CSRF protection (enable with CSRF_PROTECTION=true)
