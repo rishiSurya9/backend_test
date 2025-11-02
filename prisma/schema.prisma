@@ -26,6 +26,7 @@ model User {
   transactions     Transaction[]
   tokenPurchases   TokenPurchase[]
   invoices         Invoice[]
+  notifications    Notification[]
 }
 
 model OTP {
@@ -168,4 +169,17 @@ model Invoice {
   tokens         Decimal        @db.Decimal(18, 4)
   planName       String
   createdAt      DateTime       @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

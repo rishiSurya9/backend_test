@@ -200,19 +200,24 @@ logout
 _________________________________________________
 ## Wallet & Payments
 
+- Auth uses the HTTP-only `access_token` cookie that login/OTP endpoints set. Ensure your API client sends cookies (`credentials: 'include'` in fetch/Axios `withCredentials: true`).
+
 - GET `http://localhost:5000/wallet` — Get wallet balances (auth)
 - POST `http://localhost:5000/wallet/transfer` — Referral → Main
   - Body: `{ "amount": 50 }`
 - (Removed) Wallet-level withdraw route deprecated; use payments withdraw.
 - GET `http://localhost:5000/wallet/transactions` — Transaction history (auth)
 
-- POST `http://localhost:5000/payments/add-funds/order` — Create add-funds order (Razorpay only)
+- POST `http://localhost:5000/payments/add-funds/order` — Create Razorpay order (live REST call)
   - Body: `{ "amount": 500, "currency": "INR" }`
-  - Returns order/id; webhook will credit on success.
+  - Returns Razorpay order payload; `/webhooks/razorpay` credits wallet on success.
 
 - POST `http://localhost:5000/payments/withdraw` — Withdraw from main wallet (Razorpay payouts semantics)
-  - Body: `{ "amount": 1200, "method": "UPI"|"BANK", "details": { ... } }`
-  - Enforces min (₹100 default) and admin approval if amount > `WITHDRAW_ADMIN_THRESHOLD`.
+  - Body (UPI): `{ "amount": 1200, "method": "UPI", "details": { "vpa": "user@bank", "contact": { "name": "John", "email": "john@example.com", "phone": "+9199..." } } }`
+  - Body (BANK): `{ "amount": 1200, "method": "BANK", "details": { "ifsc": "HDFC0001", "accountNumber": "1234567890", "accountName": "John Doe", "mode": "IMPS", "contact": { ... } } }`
+  - Enforces min (₹100 default). Amounts above `WITHDRAW_ADMIN_THRESHOLD` stay pending until an admin approves (which triggers the Razorpay payout).
+  - Requires Razorpay payout creds (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_ACCOUNT_NUMBER`).
+  - Optional: pass existing Razorpay identifiers (`details.contactId`, `details.fundAccountId`) to reuse stored payout destinations.
 
 - GET `http://localhost:5000/payments/transactions` - List payment transactions (add-funds + withdrawals)
   - Query: `?limit=20&cursor=<id>&type=ADD_FUNDS|WITHDRAW&status=PENDING|SUCCESS|FAILED`
@@ -238,7 +243,7 @@ _________________________________________________
 - POST `http://localhost:5000/webhooks/stripe` — Stripe webhook (configure secret)
 
 Environment keys in `.env`:
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_ACCOUNT_NUMBER`
 - `STRIPE_WEBHOOK_SECRET` (only for webhook verification; payments use Razorpay)
 - `MIN_WITHDRAW_AMOUNT` (default 100)
 - `WITHDRAW_ADMIN_THRESHOLD` (default 5000)

@@ -4,10 +4,10 @@ import { env } from '../config/env.js';
 
 export async function requireAuth(req, res, next) {
   try {
-    const header = req.headers['authorization'] || '';
-    let [, token] = header.split(' ');
-    if (!token && req.cookies && req.cookies.access_token) {
-      token = req.cookies.access_token;
+    let token = req.cookies && req.cookies.access_token;
+    if (!token) {
+      const header = req.headers['authorization'] || '';
+      [, token] = header.split(' ');
     }
     if (!token) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 

@@ -2,15 +2,40 @@ import crypto from 'crypto';
 import { prisma } from '../prisma/client.js';
 import { finalizeSuccessfulTokenPurchase } from './paymentController.js';
 import { env } from '../config/env.js';
+import { eventBus } from '../events/eventBus.js';
+import { EVENTS } from '../events/eventTypes.js';
 
 async function creditWalletForTransaction(tx, trx) {
-  if (trx.status !== 'SUCCESS') return;
+  const events = [];
+  if (trx.status !== 'SUCCESS') return events;
   if (trx.type === 'ADD_FUNDS' && trx.walletTo === 'MAIN') {
-    await tx.wallet.update({ where: { userId: trx.userId }, data: { mainBalance: { increment: Number(trx.amount) } } });
+    await tx.wallet.upsert({
+      where: { userId: trx.userId },
+      update: { mainBalance: { increment: Number(trx.amount) } },
+      create: {
+        userId: trx.userId,
+        mainBalance: Number(trx.amount)
+      }
+    });
+    events.push({
+      type: EVENTS.WALLET_CREDITED,
+      payload: {
+        userId: trx.userId,
+        amount: Number(trx.amount),
+        currency: trx.currency
+      }
+    });
   } else if (trx.type === 'TOKEN_PURCHASE' && trx.walletTo === 'TOKEN') {
     // Defer to token purchase finalizer (handles credit + invoice)
-    await finalizeSuccessfulTokenPurchase(tx, trx);
+    const tokenEvent = await finalizeSuccessfulTokenPurchase(tx, trx);
+    if (tokenEvent) {
+      events.push({
+        type: EVENTS.TOKEN_PURCHASED,
+        payload: tokenEvent
+      });
+    }
   }
+  return events;
 }
 
 export async function razorpayWebhook(req, res) {
@@ -37,6 +62,7 @@ export async function razorpayWebhook(req, res) {
     }
 
     if (orderId) {
+      const events = [];
       await prisma.$transaction(async (tx) => {
         let trx = await tx.transaction.findFirst({ where: { referenceId: orderId } });
         if (!trx) {
@@ -46,9 +72,11 @@ export async function razorpayWebhook(req, res) {
         const newStatus = (eventType === 'order.paid' || eventType === 'payment.captured') ? 'SUCCESS' : 'FAILED';
         trx = await tx.transaction.update({ where: { id: trx.id }, data: { status: newStatus, meta: event } });
         if (newStatus === 'SUCCESS') {
-          await creditWalletForTransaction(tx, trx);
+          const produced = await creditWalletForTransaction(tx, trx);
+          produced.forEach((evt) => events.push(evt));
         }
       });
+      events.forEach((evt) => eventBus.emit(evt.type, evt.payload));
     }
 
     return res.json({ ok: true });
@@ -84,15 +112,18 @@ export async function stripeWebhook(req, res) {
     }
 
     if (referenceId) {
+      const events = [];
       await prisma.$transaction(async (tx) => {
         let trx = await tx.transaction.findFirst({ where: { referenceId } });
         if (!trx) return;
         const newStatus = (type === 'payment_intent.succeeded' || type === 'charge.succeeded') ? 'SUCCESS' : 'FAILED';
         trx = await tx.transaction.update({ where: { id: trx.id }, data: { status: newStatus, meta: event } });
         if (newStatus === 'SUCCESS') {
-          await creditWalletForTransaction(tx, trx);
+          const produced = await creditWalletForTransaction(tx, trx);
+          produced.forEach((evt) => events.push(evt));
         }
       });
+      events.forEach((evt) => eventBus.emit(evt.type, evt.payload));
     }
 
     return res.json({ ok: true });

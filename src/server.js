@@ -12,10 +12,20 @@ import authRouter from './routes/authRoute.js';
 import walletRouter from './routes/walletRoute.js';
 import paymentRouter from './routes/paymentRoute.js';
 import webhookRouter from './routes/webhookRoute.js';
+import adminRouter from './routes/adminRoute.js';
+import notificationRouter from './routes/notificationRoute.js';
+import adminNotificationRouter from './routes/adminNotificationRoute.js';
+import { registerNotificationHandlers } from './services/notificationEvents.js';
 import { ensurePlansSeeded } from './services/planService.js';
+import tempClearRouter from './routes/tempClearRoute.js';
+// …
+
+
+
+registerNotificationHandlers();
 
 const app = express();
-
+// app.use('/temp', tempClearRouter);
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: env.APP_URL, credentials: true }));
@@ -61,6 +71,9 @@ app.use('/auth', authRouter);
 app.use('/wallet', walletRouter);
 app.use('/payments', paymentRouter);
 app.use('/webhooks', webhookRouter);
+app.use('/admin', adminRouter);
+app.use('/api/notifications', notificationRouter);
+app.use('/api/admin/notifications', adminNotificationRouter);
 app.use(express.json());
 // Error handler
 // eslint-disable-next-line no-unused-vars

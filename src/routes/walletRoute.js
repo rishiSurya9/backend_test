@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { getWallet, transferReferralToMain, withdraw, listTransactions } from '../controller/walletController.js';
+import { getWallet, transferReferralToMain, listTransactions } from '../controller/walletController.js';
 
 const router = Router();
 
