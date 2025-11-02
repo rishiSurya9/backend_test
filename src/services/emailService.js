@@ -1,33 +1,18 @@
-import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import nodemailer from "nodemailer";
 
-function buildTransport() {
-  if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS) {
-    return nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_SECURE,
-      auth: { user: env.SMTP_USER, pass: env.SMTP_PASS }
-    });
-  }
-  return null;
-}
+export const sendEmail = async (to, subject, text) => {
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
 
-const transport = buildTransport();
-
-export async function sendOtpEmail(email, code) {
-  const subject = `${env.APP_NAME} - Your verification code`;
-  const text = `Your verification code is: ${code}`;
-  if (transport) {
-    await transport.sendMail({
-      from: env.SMTP_FROM_EMAIL,
-      to: email,
-      subject,
-      text
-    });
-    return { id: 'email-sent' };
-  }
-  console.log(`[EMAIL:DEV] to=${email} subject="${subject}" text="${text}"`);
-  return { id: 'dev-email' };
-}
-
+  await transporter.sendMail({
+    from: `"MLM Verification"${process.env.EMAIL_USER}`,
+    to,
+    subject,
+    text,
+  });
+};

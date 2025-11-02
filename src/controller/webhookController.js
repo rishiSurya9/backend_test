@@ -27,11 +27,23 @@ async function creditWalletForTransaction(tx, trx) {
     });
   } else if (trx.type === 'TOKEN_PURCHASE' && trx.walletTo === 'TOKEN') {
     // Defer to token purchase finalizer (handles credit + invoice)
-    const tokenEvent = await finalizeSuccessfulTokenPurchase(tx, trx);
-    if (tokenEvent) {
+    const result = await finalizeSuccessfulTokenPurchase(tx, trx);
+    if (result?.purchaseEvent) {
       events.push({
         type: EVENTS.TOKEN_PURCHASED,
-        payload: tokenEvent
+        payload: result.purchaseEvent
+      });
+    }
+    if (Array.isArray(result?.commissionPayouts)) {
+      result.commissionPayouts.forEach((payout) => {
+        events.push({
+          type: EVENTS.WALLET_CREDITED,
+          payload: {
+            userId: payout.userId,
+            amount: payout.amount,
+            currency: payout.currency
+          }
+        });
       });
     }
   }

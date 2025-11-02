@@ -39,6 +39,13 @@ export const env = {
   PLAN_PRO_USD: Number(process.env.PLAN_PRO_USD || 50),
   PLAN_ELITE_USD: Number(process.env.PLAN_ELITE_USD || 100)
   ,
+  // Matrix / MLM
+  MATRIX_ROOT_USER_ID: process.env.MATRIX_ROOT_USER_ID,
+  MATRIX_CHILD_LIMIT: Number(process.env.MATRIX_CHILD_LIMIT || 8),
+  COMMISSION_DEFAULTS: process.env.COMMISSION_DEFAULTS,
+  COMMISSION_CURRENCY: process.env.COMMISSION_CURRENCY || 'INR',
+  MONTHLY_ACTIVITY_GRACE_DAYS: Number(process.env.MONTHLY_ACTIVITY_GRACE_DAYS || 30)
+  ,
   // Admin guards
   ADMIN_USER_IDS: process.env.ADMIN_USER_IDS,
   ADMIN_EMAILS: process.env.ADMIN_EMAILS

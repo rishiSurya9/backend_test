@@ -17,7 +17,10 @@ import notificationRouter from './routes/notificationRoute.js';
 import adminNotificationRouter from './routes/adminNotificationRoute.js';
 import { registerNotificationHandlers } from './services/notificationEvents.js';
 import { ensurePlansSeeded } from './services/planService.js';
+import { ensureCommissionSettingsSeeded } from './services/commissionService.js';
+import mlmRouter from './routes/mlmRoute.js';
 import tempClearRouter from './routes/tempClearRoute.js';
+// import tempClearRouter from './routes/tempClearRoute.js';
 // …
 
 
@@ -49,6 +52,9 @@ app.get('/health', (req, res) => {
 ensurePlansSeeded().catch((e) => {
   console.error('Plan seeding failed:', e?.message || e);
 });
+ensureCommissionSettingsSeeded().catch((e) => {
+  console.error('Commission seeding failed:', e?.message || e);
+});
 
 // Optional CSRF protection (enable with CSRF_PROTECTION=true)
 if (env.CSRF_PROTECTION) {
@@ -73,6 +79,7 @@ app.use('/payments', paymentRouter);
 app.use('/webhooks', webhookRouter);
 app.use('/admin', adminRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/mlm',mlmRouter);
 app.use('/api/admin/notifications', adminNotificationRouter);
 app.use(express.json());
 // Error handler

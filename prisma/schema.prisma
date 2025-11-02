@@ -8,25 +8,48 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(cuid())
-  username         String?  @unique
-  phone            String   @unique
-  email            String?  @unique
-  passwordHash     String?  // bcrypt hash
-  pinHash          String?  // 4-digit PIN hashed via bcrypt
-  totpSecret       String?  // base32 secret for TOTP
-  totpEnabled      Boolean  @default(false)
-  emailVerifiedAt  DateTime?
-  phoneVerifiedAt  DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  username           String?  @unique
+  phone              String   @unique
+  email              String?  @unique
+  passwordHash       String?  // bcrypt hash
+  pinHash            String?  // 4-digit PIN hashed via bcrypt
+  totpSecret         String?  // base32 secret for TOTP
+  totpEnabled        Boolean  @default(false)
+  emailVerifiedAt    DateTime?
+  phoneVerifiedAt    DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  sponsorId          String?
+  parentId           String?
+  path               String?  @db.VarChar(512)
+  matrixLevel        Int      @default(0)
+  positionIndex      Int?
+  isActive           Boolean  @default(false)
+  activeUntil        DateTime?
+  lastPlanRenewalAt  DateTime?
+  activityStatus     ActivityStatus @default(LAPSED)
+  qualificationLevel Int      @default(0)
 
-  otps             OTP[]
-  wallet           Wallet?
-  transactions     Transaction[]
-  tokenPurchases   TokenPurchase[]
-  invoices         Invoice[]
-  notifications    Notification[]
+  otps               OTP[]
+  wallet             Wallet?
+  transactions       Transaction[]
+  tokenPurchases     TokenPurchase[]
+  invoices           Invoice[]
+  notifications      Notification[]
+  sponsoredUsers     User[]   @relation("UserSponsor")
+  sponsor            User?    @relation("UserSponsor", fields: [sponsorId], references: [id])
+  children           User[]   @relation("MatrixParent")
+  parent             User?    @relation("MatrixParent", fields: [parentId], references: [id])
+  availableSlot      AvailablePosition?
+  commissionsReceived CommissionHistory[] @relation("CommissionRecipient")
+  commissionsGenerated CommissionHistory[] @relation("CommissionSource")
+  levelQualifications LevelQualificationHistory[]
+  activityLogs       ActivityHistory[]
+
+  @@index([sponsorId(length: 64)])
+  @@index([parentId(length: 64)])
+  @@index([path(length: 128)])
 }
 
 model OTP {
@@ -99,6 +122,7 @@ enum TransactionType {
   WITHDRAW
   TRANSFER_INTERNAL
   TOKEN_PURCHASE
+  COMMISSION
 }
 
 enum TransactionStatus {
@@ -182,4 +206,92 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+model AvailablePosition {
+  id         Int      @id @default(autoincrement())
+  userId     String   @unique
+  depth      Int
+  childCount Int      @default(0)
+  path       String   @db.VarChar(512)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([depth, createdAt])
+  @@index([createdAt, id])
+}
+
+model CommissionSetting {
+  level     Int      @id
+  percent   Decimal  @db.Decimal(5, 2)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CommissionHistory {
+  id                  String   @id @default(cuid())
+  userId              String
+  sourceUserId        String
+  level               Int
+  amount              Decimal  @db.Decimal(18, 2)
+  currency            String   @default("INR")
+  status              CommissionStatus
+  reason              String?
+  walletTransactionId String?
+  eventRef            String
+  createdAt           DateTime @default(now())
+
+  user       User @relation("CommissionRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  sourceUser User @relation("CommissionSource", fields: [sourceUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sourceUserId, createdAt])
+  @@unique([eventRef, userId])
+}
+
+model LevelQualificationHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  level       Int
+  status      QualificationStatus
+  qualifiedAt DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId(length: 64), level])
+}
+
+model ActivityHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  period    DateTime
+  status    ActivityStatus
+  checkedAt DateTime @default(now())
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period], name: "user_period")
+  @@index([status, period])
+}
+
+enum CommissionStatus {
+  PAID
+  SKIPPED
+}
+
+enum QualificationStatus {
+  QUALIFIED
+  REVOKED
+}
+
+enum ActivityStatus {
+  ACTIVE
+  LAPSED
 }

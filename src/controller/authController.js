@@ -1,9 +1,11 @@
 import { prisma } from '../prisma/client.js';
 import { env } from '../config/env.js';
 import { randomDigits, hashOtpCode, verifyOtpCode, hashPassword, verifyPassword } from '../utils/crypto.js';
-import { sendOtpEmail } from '../services/emailService.js';
+import { sendEmail } from '../services/emailService.js';
 import { sendOtpSms } from '../services/smsService.js';
 import { signAccessToken } from '../utils/jwt.js';
+import { assignSponsorAndPlaceUser, recalculateQualificationLevel } from '../services/matrixService.js';
+import { ensureUserActivityStatus } from '../services/activityService.js';
 
 const COOKIE_NAME = 'access_token';
 const COOKIE_OPTIONS = {
@@ -31,6 +33,18 @@ function assert(condition, message = 'Bad Request', code = 400) {
 
 function nowPlusMs(ms) {
   return new Date(Date.now() + ms);
+}
+
+function buildOtpEmail(code) {
+  return {
+    subject: `${env.APP_NAME} - Your verification code`,
+    text: `Your verification code is: ${code}`
+  };
+}
+
+async function sendOtpEmail(to, code) {
+  const { subject, text } = buildOtpEmail(code);
+  await sendEmail(to, subject, text);
 }
 
 async function findUserByIdentifier(identifier) {
@@ -66,7 +80,7 @@ export async function requestOtp(req, res, next) {
 // Generic OTP verify (creates user if missing)
 export async function verifyOtp(req, res, next) {
   try {
-    const { type, identifier, code } = req.body || {};
+    const { type, identifier, code, referralCode } = req.body || {};
     assert(type === 'EMAIL' || type === 'PHONE', 'type must be EMAIL or PHONE');
     assert(typeof identifier === 'string', 'identifier required');
     assert(typeof code === 'string' && code.length >= 4, 'code required');
@@ -81,26 +95,56 @@ export async function verifyOtp(req, res, next) {
 
     let user = await findUserByIdentifier(identifier);
     if (!user) {
-      user = await prisma.user.create({
-        data: type === 'EMAIL' ? { email: identifier, emailVerifiedAt: new Date() } : { phone: identifier, phoneVerifiedAt: new Date() }
+      const userData = type === 'EMAIL'
+        ? { email: identifier, emailVerifiedAt: new Date() }
+        : { phone: identifier, phoneVerifiedAt: new Date() };
+      user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({ data: userData });
+        const placed = await assignSponsorAndPlaceUser({ userId: created.id, referralCode }, tx);
+        if (placed?.sponsorId) {
+          await recalculateQualificationLevel(placed.sponsorId, tx);
+        }
+        return placed;
       });
     } else {
       user = await prisma.user.update({
         where: { id: user.id },
         data: type === 'EMAIL' ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() }
       });
+      if (referralCode) {
+        const placed = await assignSponsorAndPlaceUser({ userId: user.id, referralCode });
+        if (placed?.sponsorId) {
+          await recalculateQualificationLevel(placed.sponsorId);
+        }
+        user = placed;
+      }
     }
 
     const token = signAccessToken({ id: user.id });
     setAuthCookie(res, token);
-    res.json({ ok: true, user: { id: user.id, email: user.email, phone: user.phone }, token });
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        username: user.username,
+        activityStatus: user.activityStatus,
+        isActive: user.isActive,
+        sponsorId: user.sponsorId,
+        parentId: user.parentId,
+        matrixLevel: user.matrixLevel,
+        qualificationLevel: user.qualificationLevel
+      },
+      token
+    });
   } catch (err) { next(err); }
 }
 
 // Signup: create account, send phone OTP to verify phone, no token yet
 export async function signup(req, res, next) {
   try {
-    const { username, email, phone, password } = req.body || {};
+    const { username, email, phone, password, referralCode } = req.body || {};
     assert(username && typeof username === 'string', 'username required');
     assert(email || phone, 'email or phone required');
     assert(password, 'password required');
@@ -110,7 +154,14 @@ export async function signup(req, res, next) {
     if (email) data.email = email;
     if (phone) data.phone = phone;
 
-    const user = await prisma.user.create({ data });
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({ data });
+      const placed = await assignSponsorAndPlaceUser({ userId: created.id, referralCode }, tx);
+      if (placed?.sponsorId) {
+        await recalculateQualificationLevel(placed.sponsorId, tx);
+      }
+      return placed;
+    });
 
     if (phone) {
       const code = randomDigits(6);
@@ -120,7 +171,22 @@ export async function signup(req, res, next) {
       await sendOtpSms(phone, code);
     }
 
-    res.status(201).json({ ok: true, next: 'verify_phone', user: { id: user.id, email: user.email, phone: user.phone, username: user.username } });
+    res.status(201).json({
+      ok: true,
+      next: 'verify_phone',
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        username: user.username,
+        sponsorId: user.sponsorId,
+        parentId: user.parentId,
+        matrixLevel: user.matrixLevel,
+        activityStatus: user.activityStatus,
+        isActive: user.isActive,
+        qualificationLevel: user.qualificationLevel
+      }
+    });
   } catch (err) {
     if (err.code === 'P2002') {
       err.status = 409;
@@ -195,9 +261,30 @@ export async function login(req, res, next) {
       assert(false, 'password or code required');
     }
 
+    await ensureUserActivityStatus(user.id);
+    const freshUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        username: true,
+        activityStatus: true,
+        isActive: true,
+        qualificationLevel: true,
+        matrixLevel: true,
+        sponsorId: true,
+        parentId: true
+      }
+    });
+
     const token = signAccessToken({ id: user.id });
     setAuthCookie(res, token);
-    res.json({ ok: true, user: { id: user.id, email: user.email, phone: user.phone, username: user.username }, token });
+    res.json({
+      ok: true,
+      user: freshUser,
+      token
+    });
   } catch (err) { next(err); }
 }
 

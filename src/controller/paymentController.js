@@ -4,6 +4,8 @@ import { createInvoiceForTokenPurchase } from '../services/invoiceService.js';
 import { describePlanPricing } from '../services/planService.js';
 import { eventBus } from '../events/eventBus.js';
 import { EVENTS } from '../events/eventTypes.js';
+import { distributePurchaseCommission } from '../services/commissionService.js';
+import { recordPlanRenewal } from '../services/activityService.js';
 
 function assert(condition, message = 'Bad Request', code = 400) {
   if (!condition) {
@@ -655,12 +657,25 @@ export async function finalizeSuccessfulTokenPurchase(tx, trx) {
     tokens: Number(updated.tokens)
   }, tx);
 
-  return {
+  await recordPlanRenewal(trx.userId, new Date(), tx);
+  const commissionResult = await distributePurchaseCommission({
     userId: trx.userId,
-    tokens: Number(updated.tokens),
-    amount: Number(trx.amount),
-    currency: trx.currency,
-    planName: trx.meta?.planName || null
+    amountInr: Number(updated.priceInr),
+    transactionId: trx.id,
+    purchaseId: updated.id,
+    currency: trx.currency
+  }, tx);
+
+  return {
+    purchaseEvent: {
+      userId: trx.userId,
+      tokens: Number(updated.tokens),
+      amount: Number(trx.amount),
+      currency: trx.currency,
+      planName: trx.meta?.planName || null
+    },
+    commissionPayouts: commissionResult.payouts,
+    commissionSkipped: commissionResult.skipped
   };
 }
 
