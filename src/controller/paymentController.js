@@ -6,6 +6,7 @@ import { eventBus } from '../events/eventBus.js';
 import { EVENTS } from '../events/eventTypes.js';
 import { distributePurchaseCommission } from '../services/commissionService.js';
 import { recordPlanRenewal } from '../services/activityService.js';
+import { requireTransactionPin } from '../services/pinService.js';
 
 function assert(condition, message = 'Bad Request', code = 400) {
   if (!condition) {
@@ -319,7 +320,7 @@ export async function createAddFundsOrder(req, res, next) {
 // Create token purchase order for a given plan
 export async function createTokenPurchaseOrder(req, res, next) {
   try {
-    const { planId, planName } = req.body || {};
+    const { planId, planName, pin } = req.body || {};
     const userId = req.user.id;
 
     let plan = null;
@@ -332,6 +333,8 @@ export async function createTokenPurchaseOrder(req, res, next) {
     const { priceUsd, amountInr, tokens } = describePlanPricing(plan);
     assert(amountInr > 0, 'Plan amount not configured');
     assert(tokens > 0, 'Plan token amount not configured');
+
+    await requireTransactionPin(userId, pin);
 
     const result = await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
@@ -417,7 +420,7 @@ export async function createTokenPurchaseOrder(req, res, next) {
 // If amount exceeds WITHDRAW_ADMIN_THRESHOLD, leave as PENDING awaiting admin approval.
 export async function withdrawFunds(req, res, next) {
   try {
-    const { amount, method = 'UPI', details } = req.body || {};
+    const { amount, method = 'UPI', details, pin } = req.body || {};
     const amt = Number(amount);
     assert(Number.isFinite(amt) && amt > 0, 'amount must be > 0');
 
@@ -434,6 +437,7 @@ export async function withdrawFunds(req, res, next) {
     const requiresApproval = amt > threshold;
 
     const userId = req.user.id;
+    await requireTransactionPin(userId, pin);
 
     const { wallet: debitedWallet, transaction } = await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.upsert({ where: { userId }, update: {}, create: { userId } });

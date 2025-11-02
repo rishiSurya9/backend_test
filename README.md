@@ -204,7 +204,8 @@ _________________________________________________
 
 - GET `http://localhost:5000/wallet` — Get wallet balances (auth)
 - POST `http://localhost:5000/wallet/transfer` — Referral → Main
-  - Body: `{ "amount": 50 }`
+  - Body: `{ "amount": 50, "pin": "1234" }`
+  - Requires 4-digit transaction PIN set via `/auth/set-pin`.
 - (Removed) Wallet-level withdraw route deprecated; use payments withdraw.
 - GET `http://localhost:5000/wallet/transactions` — Transaction history (auth)
 
@@ -213,11 +214,12 @@ _________________________________________________
   - Returns Razorpay order payload; `/webhooks/razorpay` credits wallet on success.
 
 - POST `http://localhost:5000/payments/withdraw` — Withdraw from main wallet (Razorpay payouts semantics)
-  - Body (UPI): `{ "amount": 1200, "method": "UPI", "details": { "vpa": "user@bank", "contact": { "name": "John", "email": "john@example.com", "phone": "+9199..." } } }`
-  - Body (BANK): `{ "amount": 1200, "method": "BANK", "details": { "ifsc": "HDFC0001", "accountNumber": "1234567890", "accountName": "John Doe", "mode": "IMPS", "contact": { ... } } }`
+  - Body (UPI): `{ "amount": 1200, "method": "UPI", "pin": "1234", "details": { "vpa": "user@bank", "contact": { "name": "John", "email": "john@example.com", "phone": "+9199..." } } }`
+  - Body (BANK): `{ "amount": 1200, "method": "BANK", "pin": "1234", "details": { "ifsc": "HDFC0001", "accountNumber": "1234567890", "accountName": "John Doe", "mode": "IMPS", "contact": { ... } } }`
   - Enforces min (₹100 default). Amounts above `WITHDRAW_ADMIN_THRESHOLD` stay pending until an admin approves (which triggers the Razorpay payout).
   - Requires Razorpay payout creds (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_ACCOUNT_NUMBER`).
   - Optional: pass existing Razorpay identifiers (`details.contactId`, `details.fundAccountId`) to reuse stored payout destinations.
+  - Requires the user's 4-digit transaction PIN in every request.
 
 - GET `http://localhost:5000/payments/transactions` - List payment transactions (add-funds + withdrawals)
   - Query: `?limit=20&cursor=<id>&type=ADD_FUNDS|WITHDRAW&status=PENDING|SUCCESS|FAILED`
@@ -225,8 +227,9 @@ _________________________________________________
 - GET `http://localhost:5000/payments/plans` - List active token sale plans with computed INR price and token quantity.
 
 - POST `http://localhost:5000/payments/token/purchase` - Buy tokens using main wallet balance (alias: `/payments/token/order`).
-  - Body: `{ "planId": "<plan-id>" }` or `{ "planName": "Starter" }`
+  - Body: `{ "planId": "<plan-id>", "pin": "1234" }` or `{ "planName": "Starter", "pin": "1234" }`
   - Debits main balance, credits token balance, creates `Transaction`, `TokenPurchase`, and PDF invoice. Response includes `{ tokenPurchaseId, transactionId, tokens, amountInr, invoiceId, wallet }`.
+  - Requires the 4-digit transaction PIN on every purchase.
 
 - GET `http://localhost:5000/payments/token/purchases` - Paginated token purchase history for the authenticated user.
   - Query: `?limit=20&cursor=<id>`

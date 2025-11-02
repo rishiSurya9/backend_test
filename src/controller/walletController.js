@@ -1,4 +1,5 @@
 import { prisma } from '../prisma/client.js';
+import { requireTransactionPin } from '../services/pinService.js';
 
 function assert(condition, message = 'Bad Request', code = 400) {
   if (!condition) {
@@ -25,11 +26,12 @@ export async function getWallet(req, res, next) {
 
 export async function transferReferralToMain(req, res, next) {
   try {
-    const { amount } = req.body || {};
+    const { amount, pin } = req.body || {};
     const amt = Number(amount);
     assert(Number.isFinite(amt) && amt > 0, 'amount must be > 0');
 
     const userId = req.user.id;
+    await requireTransactionPin(userId, pin);
 
     const result = await prisma.$transaction(async (tx) => {
       const wallet = await getOrCreateWallet(userId);
