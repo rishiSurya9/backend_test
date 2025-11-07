@@ -44,6 +44,10 @@ app.use(
   })
 );
 
+app.get('/', (_req, res) => {
+  res.json({ status: 'ok', name: env.APP_NAME, message: 'Service alive' });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', name: env.APP_NAME, env: env.NODE_ENV });
 });
