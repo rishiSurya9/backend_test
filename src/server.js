@@ -27,6 +27,14 @@ import tempClearRouter from './routes/tempClearRoute.js';
 
 registerNotificationHandlers();
 
+const allowedOrigins = (() => {
+  const parsed = String(env.APP_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return parsed.length ? parsed : ['http://localhost:3000'];
+})();
+
 const rawBodySaver = (req, _res, buf) => {
   if (buf && buf.length) {
     req.rawBody = buf.toString('utf8');
@@ -37,7 +45,17 @@ const app = express();
 // app.use('/temp', tempClearRouter);
 app.set('trust proxy', 1);
 app.use(helmet());
-app.use(cors({ origin: env.APP_URL, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+  })
+);
 app.use(cookieParser());
 app.use(xss());
 app.use(morgan('dev'));

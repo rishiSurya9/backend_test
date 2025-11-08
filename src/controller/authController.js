@@ -8,10 +8,11 @@ import { assignSponsorAndPlaceUser, recalculateQualificationLevel } from '../ser
 import { ensureUserActivityStatus } from '../services/activityService.js';
 
 const COOKIE_NAME = 'access_token';
+const isProduction = env.NODE_ENV === 'production';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: 'lax',
-  secure: env.NODE_ENV === 'production',
+  sameSite: isProduction ? 'none' : 'lax',
+  secure: isProduction,
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
 
