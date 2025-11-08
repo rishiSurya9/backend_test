@@ -27,10 +27,11 @@ import tempClearRouter from './routes/tempClearRoute.js';
 
 registerNotificationHandlers();
 
+const sanitizeOrigin = (origin = '') => origin.replace(/\/+$/, '').trim();
 const allowedOrigins = (() => {
   const parsed = String(env.APP_URL || '')
     .split(',')
-    .map((origin) => origin.trim())
+    .map(sanitizeOrigin)
     .filter(Boolean);
   return parsed.length ? parsed : ['http://localhost:3000'];
 })();
@@ -41,21 +42,24 @@ const rawBodySaver = (req, _res, buf) => {
   }
 };
 
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const normalized = sanitizeOrigin(origin);
+    if (allowedOrigins.includes(normalized)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+};
+
 const app = express();
 // app.use('/temp', tempClearRouter);
 app.set('trust proxy', 1);
 app.use(helmet());
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true
-  })
-);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(cookieParser());
 app.use(xss());
 app.use(morgan('dev'));

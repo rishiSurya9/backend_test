@@ -8,15 +8,14 @@ import { assignSponsorAndPlaceUser, recalculateQualificationLevel } from '../ser
 import { ensureUserActivityStatus } from '../services/activityService.js';
 
 const COOKIE_NAME = 'access_token';
-const isProduction = env.NODE_ENV === 'production';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: isProduction ? 'none' : 'lax',
-  secure: isProduction,
+  sameSite: 'none',
+  secure: true,
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
 
-function setAuthCookie(res, token) {
+function setAuthCookie(_req, res, token) {
   try {
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
   } catch (_) {
@@ -122,7 +121,7 @@ export async function verifyOtp(req, res, next) {
     }
 
     const token = signAccessToken({ id: user.id });
-    setAuthCookie(res, token);
+    setAuthCookie(req, res, token);
     res.json({
       ok: true,
       user: {
@@ -217,7 +216,7 @@ export async function verifyPhoneOtp(req, res, next) {
 
     const updated = await prisma.user.update({ where: { id: user.id }, data: { phoneVerifiedAt: new Date() } });
     const token = signAccessToken({ id: updated.id });
-    setAuthCookie(res, token);
+    setAuthCookie(req, res, token);
     res.json({ ok: true, next: 'set_transaction_pin', token });
   } catch (err) { next(err); }
 }
@@ -280,7 +279,7 @@ export async function login(req, res, next) {
     });
 
     const token = signAccessToken({ id: user.id });
-    setAuthCookie(res, token);
+    setAuthCookie(req, res, token);
     res.json({
       ok: true,
       user: freshUser,
