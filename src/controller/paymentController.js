@@ -288,7 +288,7 @@ export async function createAddFundsOrder(req, res, next) {
       body: {
         amount: Math.round(amt * 100),
         currency,
-        receipt: `rcpt_${userId}_${Date.now()}`,
+        receipt: `rcpt_${userId}_${Date.now()}`.slice(0, 40),
         payment_capture: 1
       }
     });
