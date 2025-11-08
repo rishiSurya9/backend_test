@@ -27,13 +27,17 @@ import tempClearRouter from './routes/tempClearRoute.js';
 
 registerNotificationHandlers();
 
+const rawBodySaver = (req, _res, buf) => {
+  if (buf && buf.length) {
+    req.rawBody = buf.toString('utf8');
+  }
+};
+
 const app = express();
 // app.use('/temp', tempClearRouter);
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: env.APP_URL, credentials: true }));
-// Capture raw body for webhook signature verification
-app.use(express.json({ verify: (req, _res, buf) => { try { req.rawBody = buf.toString('utf8'); } catch (_) {} } }));
 app.use(cookieParser());
 app.use(xss());
 app.use(morgan('dev'));
@@ -43,6 +47,10 @@ app.use(
     max: 200
   })
 );
+// Webhooks need raw body for signature verification
+app.use('/webhooks', express.raw({ type: '*/*', verify: rawBodySaver }), webhookRouter);
+// Standard JSON parser for the rest of the app
+app.use(express.json());
 
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', name: env.APP_NAME, message: 'Service alive' });
@@ -80,12 +88,10 @@ if (env.CSRF_PROTECTION) {
 app.use('/auth', authRouter);
 app.use('/wallet', walletRouter);
 app.use('/payments', paymentRouter);
-app.use('/webhooks', webhookRouter);
 app.use('/admin', adminRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/mlm',mlmRouter);
 app.use('/api/admin/notifications', adminNotificationRouter);
-app.use(express.json());
 // Error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
