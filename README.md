@@ -235,12 +235,18 @@ _________________________________________________
 - GET `http://localhost:5000/payments/transactions` - List payment transactions (add-funds + withdrawals)
   - Query: `?limit=20&cursor=<id>&type=ADD_FUNDS|WITHDRAW&status=PENDING|SUCCESS|FAILED`
 
-- GET `http://localhost:5000/payments/plans` - List active token sale plans with computed INR price and token quantity.
+- GET `http://localhost:5000/payments/plans` - List active token sale plans with computed INR price and token quantity. Tokens are priced at INR 10 each (configurable via `TOKEN_VALUE_INR`).
 
 - POST `http://localhost:5000/payments/token/purchase` - Buy tokens using main wallet balance (alias: `/payments/token/order`).
   - Body: `{ "planId": "<plan-id>", "pin": "1234" }` or `{ "planName": "Starter", "pin": "1234" }`
-  - Debits main balance, credits token balance, creates `Transaction`, `TokenPurchase`, and PDF invoice. Response includes `{ tokenPurchaseId, transactionId, tokens, amountInr, invoiceId, wallet }`.
+  - Debits main balance, credits token balance, creates `Transaction`, `TokenPurchase`, and PDF invoice. Response includes `{ tokenPurchaseId, transactionId, tokens, tokenValueInr, amountInr, invoiceId, wallet }`.
   - Requires the 4-digit transaction PIN on every purchase.
+
+- Razorpay webhook configuration (needed for `/payments/add-funds/order` to reflect in the wallet):
+  1. Deploy or tunnel the backend so Razorpay can reach `POST https://<your-domain>/webhooks/razorpay`.
+  2. In the Razorpay dashboard, add that URL as a webhook, enable at least the `order.paid` event, and set a secret.
+  3. Copy the same secret into `.env` as `RAZORPAY_WEBHOOK_SECRET`, restart the server, and ensure the `/webhooks` route stays ahead of `express.json()` (already configured in `src/server.js`).
+  4. When a payment succeeds, Razorpay sends the webhook, our handler verifies the signature, marks the transaction `SUCCESS`, and credits `Wallet.mainBalance`.
 
 - GET `http://localhost:5000/payments/token/purchases` - Paginated token purchase history for the authenticated user.
   - Query: `?limit=20&cursor=<id>`
@@ -261,5 +267,5 @@ Environment keys in `.env`:
 - `STRIPE_WEBHOOK_SECRET` (only for webhook verification; payments use Razorpay)
 - `MIN_WITHDRAW_AMOUNT` (default 100)
 - `WITHDRAW_ADMIN_THRESHOLD` (default 5000)
-- `USD_INR_RATE`, `TOKEN_PRICE_USD`, `PLAN_STARTER_USD`, `PLAN_GROWTH_USD`, `PLAN_PRO_USD`, `PLAN_ELITE_USD`
+- `USD_INR_RATE`, `TOKEN_VALUE_INR`, `PLAN_STARTER_USD`, `PLAN_GROWTH_USD`, `PLAN_PRO_USD`, `PLAN_ELITE_USD`
 Powered By: [postman-to-markdown](https://github.com/bautistaj/postman-to-markdown/)

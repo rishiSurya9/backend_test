@@ -2,6 +2,7 @@ import { prisma } from '../prisma/client.js';
 import { env } from '../config/env.js';
 import { createInvoiceForTokenPurchase } from '../services/invoiceService.js';
 import { describePlanPricing } from '../services/planService.js';
+import { getTokenValueInr } from '../services/tokenService.js';
 import { eventBus } from '../events/eventBus.js';
 import { EVENTS } from '../events/eventTypes.js';
 import { distributePurchaseCommission } from '../services/commissionService.js';
@@ -330,7 +331,7 @@ export async function createTokenPurchaseOrder(req, res, next) {
       const err = new Error('Plan not found'); err.status = 404; throw err;
     }
 
-    const { priceUsd, amountInr, tokens } = describePlanPricing(plan);
+    const { priceUsd, amountInr, tokens, tokenValueInr } = describePlanPricing(plan);
     assert(amountInr > 0, 'Plan amount not configured');
     assert(tokens > 0, 'Plan token amount not configured');
 
@@ -365,7 +366,8 @@ export async function createTokenPurchaseOrder(req, res, next) {
             priceUsd,
             amountInr,
             tokens,
-            rate: Number(env.USD_INR_RATE || 1)
+            rate: Number(env.USD_INR_RATE || 1),
+            tokenValueInr
           }
         }
       });
@@ -398,7 +400,8 @@ export async function createTokenPurchaseOrder(req, res, next) {
       tokens: Number(result.purchase.tokens),
       amount: Number(result.trx.amount),
       currency: result.trx.currency,
-      planName: plan.name
+      planName: plan.name,
+      tokenValueInr
     });
 
     return res.json({
@@ -406,6 +409,7 @@ export async function createTokenPurchaseOrder(req, res, next) {
       tokenPurchaseId: result.purchase.id,
       transactionId: result.trx.id,
       tokens,
+      tokenValueInr,
       amountInr,
       invoiceId: result.invoice?.id || null,
       wallet: {
@@ -676,7 +680,8 @@ export async function finalizeSuccessfulTokenPurchase(tx, trx) {
       tokens: Number(updated.tokens),
       amount: Number(trx.amount),
       currency: trx.currency,
-      planName: trx.meta?.planName || null
+      planName: trx.meta?.planName || null,
+      tokenValueInr: getTokenValueInr()
     },
     commissionPayouts: commissionResult.payouts,
     commissionSkipped: commissionResult.skipped
@@ -703,12 +708,14 @@ export async function listTokenPurchases(req, res, next) {
     });
 
     const nextCursor = purchases.length === take ? purchases[purchases.length - 1].id : null;
+    const perTokenInr = getTokenValueInr();
     const items = purchases.map((p) => ({
       id: p.id,
       status: p.status,
       priceUsd: Number(p.priceUsd),
       priceInr: Number(p.priceInr),
       tokens: Number(p.tokens),
+      tokenValueInr: perTokenInr,
       createdAt: p.createdAt,
       plan: { id: p.planId, name: p.plan?.name || null },
       invoice: p.invoice ? { id: p.invoice.id, createdAt: p.invoice.createdAt } : null,

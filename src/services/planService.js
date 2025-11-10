@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { env } from '../config/env.js';
+import { inrToTokens, getTokenValueInr } from './tokenService.js';
 
 export const PLAN_NAMES = {
   STARTER: 'Starter',
@@ -15,12 +16,8 @@ export function usdToInr(amountUsd) {
 }
 
 export function usdToTokens(amountUsd) {
-  const rate = Number(env.USD_INR_RATE || 1);
-  const tokenPriceUsd = Number(env.TOKEN_PRICE_USD || 1);
   const amountInr = usdToInr(amountUsd);
-  const normalizedUsd = rate ? amountInr / rate : Number(amountUsd) || 0;
-  const tokens = normalizedUsd / tokenPriceUsd;
-  return Number(tokens.toFixed(4));
+  return inrToTokens(amountInr);
 }
 
 export async function ensurePlansSeeded() {
@@ -51,5 +48,10 @@ export function describePlanPricing(plan) {
   const priceUsd = Number(plan.priceUsd);
   const amountInr = usdToInr(priceUsd);
   const tokens = usdToTokens(priceUsd);
-  return { priceUsd, amountInr, tokens };
+  return {
+    priceUsd,
+    amountInr,
+    tokens,
+    tokenValueInr: getTokenValueInr()
+  };
 }

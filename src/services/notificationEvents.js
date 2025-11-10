@@ -1,6 +1,7 @@
 import { eventBus } from '../events/eventBus.js';
 import { EVENTS } from '../events/eventTypes.js';
 import { createNotification } from './notificationService.js';
+import { getTokenValueInr, tokensToInr } from './tokenService.js';
 
 let registered = false;
 
@@ -28,11 +29,16 @@ export function registerNotificationHandlers() {
     }
   });
 
-  eventBus.on(EVENTS.TOKEN_PURCHASED, async ({ userId, tokens, planName } = {}) => {
+  eventBus.on(EVENTS.TOKEN_PURCHASED, async ({ userId, tokens, planName, tokenValueInr } = {}) => {
     if (!userId) return;
+    const perTokenValue = Number(tokenValueInr) || getTokenValueInr();
     const messageParts = ['Token credited'];
     if (typeof tokens === 'number' && tokens > 0) {
-      messageParts.push(`Amount: ${tokens}`);
+      messageParts.push(`Tokens: ${tokens}`);
+      const inrValue = tokensToInr(tokens, perTokenValue);
+      if (inrValue > 0) {
+        messageParts.push(`Value: INR ${inrValue.toFixed(2)}`);
+      }
     }
     if (planName) {
       messageParts.push(`Plan: ${planName}`);

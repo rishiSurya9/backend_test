@@ -11,7 +11,8 @@ export async function getPlans(_req, res, next) {
         active: plan.active,
         priceUsd: pricing.priceUsd,
         priceInr: pricing.amountInr,
-        tokens: pricing.tokens
+        tokens: pricing.tokens,
+        tokenValueInr: pricing.tokenValueInr
       };
     });
     res.json({ ok: true, plans: payload });

@@ -33,7 +33,7 @@ export const env = {
   ,
   // Token plans and FX
   USD_INR_RATE: Number(process.env.USD_INR_RATE || 83),
-  TOKEN_PRICE_USD: Number(process.env.TOKEN_PRICE_USD || 1),
+  TOKEN_VALUE_INR: Number(process.env.TOKEN_VALUE_INR || 10),
   PLAN_STARTER_USD: Number(process.env.PLAN_STARTER_USD || 10),
   PLAN_GROWTH_USD: Number(process.env.PLAN_GROWTH_USD || 25),
   PLAN_PRO_USD: Number(process.env.PLAN_PRO_USD || 50),
