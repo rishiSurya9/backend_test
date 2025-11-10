@@ -7,7 +7,7 @@
 3. **Create the service** - In Render, choose *Blueprint Deploys*, connect this repository, and select the `render.yaml`. Render will create a Node web service named `mlm-auth-api`.
 4. **Set environment variables** - At a minimum configure `DATABASE_URL`, `APP_URL` (your Render URL, e.g., `https://mlm-auth-api.onrender.com`), `JWT_SECRET`, and the SMTP/Twilio/Payment keys you plan to use. The blueprint marks the ones that Render should prompt you for.
 5. **First deploy** - Render uses the `start:render` script which runs database migrations (`prisma migrate deploy`) before launching `node src/server.js`. Watch the deploy logs to confirm Prisma connects to your database and the server prints `listening on port`.
-6. **Validate** - Hit `https://<service>.onrender.com/health` once the deploy succeeds. If CORS errors appear on the client, ensure `APP_URL` (and any frontend origins) are correct in `.env`/Render settings.
+6. **Validate** - Hit `https://<service>.onrender.com/health` once the deploy succeeds. If CORS errors appear on the client, ensure the frontend origin matches the one baked into `server.js` (defaults to `http://localhost:3000` for local dev).
 
 > Tip: for manual deploys without Blueprint, create a new Web Service from your repo, set the same build/start commands, and copy the environment variables listed above.
 
